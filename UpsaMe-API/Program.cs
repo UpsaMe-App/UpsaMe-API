@@ -1,41 +1,86 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.OpenApi.Models;
+using UpsaMe_API.Data;
+using UpsaMe_API.Data.Seed;
+using UpsaMe_API.Services;
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+// =============================
+// CONFIGURACIÓN GENERAL
+// =============================
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAll", policy =>
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod());
+});
+
+// =============================
+// BASE DE DATOS
+// =============================
+builder.Services.AddDbContext<UpsaMeDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+// =============================
+// SERVICIOS
+// =============================
+builder.Services.AddScoped<IDirectoryService, DirectoryService>();
+builder.Services.AddScoped<IPostService, PostService>();
+builder.Services.AddScoped<IDbInitializer, DbInitializer>();
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+
+// =============================
+// SWAGGER / OPENAPI
+// =============================
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "UpsaMe API",
+        Version = "v1",
+        Description = "API para la plataforma UpsaMe (Ayudantes, Estudiantes, Comentarios)"
+    });
+});
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
+// =============================
+// PIPELINE HTTP
+// =============================
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.UseSwagger();
+    app.UseSwaggerUI();
 }
 
+app.UseCors("AllowAll");
 app.UseHttpsRedirection();
+app.MapControllers();
 
-var summaries = new[]
+// =============================
+// SEED INICIAL
+// =============================
+using (var scope = app.Services.CreateScope())
 {
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
+    var services = scope.ServiceProvider;
+    try
     {
-        var forecast = Enumerable.Range(1, 5).Select(index =>
-                new WeatherForecast
-                (
-                    DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-                    Random.Shared.Next(-20, 55),
-                    summaries[Random.Shared.Next(summaries.Length)]
-                ))
-            .ToArray();
-        return forecast;
-    })
-    .WithName("GetWeatherForecast");
+        var db = services.GetRequiredService<UpsaMeDbContext>();
+        db.Database.Migrate();
+
+        var initializer = services.GetRequiredService<IDbInitializer>();
+        await initializer.InitializeAsync();
+
+        Console.WriteLine("✅ Datos iniciales cargados correctamente.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"❌ Error ejecutando seed: {ex.Message}");
+    }
+}
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}

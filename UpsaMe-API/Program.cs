@@ -26,9 +26,9 @@ builder.Services.AddDbContext<UpsaMeDbContext>(options =>
 // =============================
 // SERVICIOS
 // =============================
-builder.Services.AddScoped<IDirectoryService, DirectoryService>();
-builder.Services.AddScoped<IPostService, PostService>();
-builder.Services.AddScoped<IDbInitializer, DbInitializer>();
+// Como no hay interfaces, registrá las clases directamente:
+builder.Services.AddScoped<DirectoryService>();
+builder.Services.AddScoped<PostService>();
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -72,8 +72,8 @@ using (var scope = app.Services.CreateScope())
         var db = services.GetRequiredService<UpsaMeDbContext>();
         db.Database.Migrate();
 
-        var initializer = services.GetRequiredService<IDbInitializer>();
-        await initializer.InitializeAsync();
+        // DbInitializer es estático y su método real es Seed(db)
+        DbInitializer.Seed(db);
 
         Console.WriteLine("✅ Datos iniciales cargados correctamente.");
     }

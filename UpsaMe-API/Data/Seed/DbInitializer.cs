@@ -1,5 +1,5 @@
 ﻿namespace UpsaMe_API.Data.Seed
-{
+ {
     public static class DbInitializer
     {
         public static void Seed(UpsaMeDbContext db)

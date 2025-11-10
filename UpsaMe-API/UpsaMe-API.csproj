@@ -5,6 +5,10 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>UpsaMe_API</RootNamespace>
+
+    <!-- Docs XML para Swagger (sin romper build por faltas de comentarios) -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
@@ -27,18 +31,18 @@
     <PackageReference Include="Azure.Storage.Blobs" Version="12.19.1" />
     <PackageReference Include="Azure.Core" Version="1.40.0" />
 
-    <!-- JWT (ya lo usas en Program.cs) -->
+    <!-- JWT -->
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.0" />
 
-    <!-- FluentValidation (opcional). Si no lo estás usando aún, elimina estos dos -->
+    <!-- FluentValidation: corrige el NU1605 (mantén SOLO AspNetCore y forza core a 11.11.0) -->
     <PackageReference Include="FluentValidation" Version="11.11.0" />
     <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.1" />
 
-    <!-- Serilog -->
+    <!-- Logging -->
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.1" />
 
+    <!-- Hash de contraseñas -->
     <PackageReference Include="Isopoh.Cryptography.Argon2" Version="1.3.6" />
-
   </ItemGroup>
 
 </Project>

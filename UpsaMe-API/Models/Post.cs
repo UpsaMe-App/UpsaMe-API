@@ -36,4 +36,3 @@ namespace UpsaMe_API.Models
         public ICollection<PostReply>? Replies { get; set; }
     }
 }
-

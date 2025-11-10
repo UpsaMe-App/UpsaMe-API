@@ -1,5 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 using UpsaMe_API.Data;
+using UpsaMe_API.DTOs.Directory;
 using UpsaMe_API.Models;
 
 namespace UpsaMe_API.Services
@@ -13,7 +14,7 @@ namespace UpsaMe_API.Services
             _context = context;
         }
 
-        // Facultades
+        // ====== FACULTADES ======
         public async Task<IEnumerable<Faculty>> GetFacultiesAsync()
         {
             return await _context.Faculties
@@ -22,22 +23,24 @@ namespace UpsaMe_API.Services
                 .ToListAsync();
         }
 
-        // Carreras por facultad
-        public async Task<IEnumerable<object>> GetCareersByFacultyAsync(Guid facultyId)
+        // ====== CARRERAS POR FACULTAD ======
+        public async Task<IEnumerable<CareerDto>> GetCareersByFacultyAsync(Guid facultyId)
         {
             return await _context.Careers
                 .Where(c => c.FacultyId == facultyId)
+                .AsNoTracking()
                 .OrderBy(c => c.Name)
-                .Select(c => new
+                .Select(c => new CareerDto
                 {
-                    c.Id,
-                    c.Name,
-                    c.Slug
+                    Id = c.Id,
+                    Name = c.Name,
+                    Slug = c.Slug,
+                    FacultyId = c.FacultyId
                 })
                 .ToListAsync();
         }
 
-        // Materias (por carrera opcional)
+        // ====== MATERIAS (OPCIONALMENTE POR CARRERA) ======
         public async Task<IEnumerable<object>> GetSubjectsAsync(Guid? careerId = null)
         {
             var query = _context.Subjects.AsQueryable();

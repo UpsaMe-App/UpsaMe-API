@@ -12,8 +12,8 @@ using UpsaMe_API.Data;
 namespace UpsaMe_API.Migrations
 {
     [DbContext(typeof(UpsaMeDbContext))]
-    [Migration("20251110041502_InitialCreate2")]
-    partial class InitialCreate2
+    [Migration("20251110193851_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

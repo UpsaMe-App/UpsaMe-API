@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using UpsaMe_API.DTOs.Auth;
 using UpsaMe_API.Services;
 
@@ -9,30 +10,93 @@ namespace UpsaMe_API.Controllers
     public class AuthController : ControllerBase
     {
         private readonly AuthService _authService;
+
         public AuthController(AuthService authService)
         {
             _authService = authService;
         }
 
+        /// <summary>Registro de usuario UPSA.</summary>
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] RegisterDto dto)
+        [AllowAnonymous]
+        [ProducesResponseType(typeof(TokenResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult<TokenResponseDto>> Register(
+            [FromBody] RegisterDto dto,
+            CancellationToken ct)
         {
-            var tokens = await _authService.RegisterAsync(dto);
-            return Ok(tokens);
+            try
+            {
+                var tokens = await _authService.RegisterAsync(dto);
+                return Ok(tokens);
+            }
+            catch (Exception ex)
+            {
+                return Problem(
+                    title: "No se pudo registrar",
+                    detail: ex.Message,
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
         }
 
+        /// <summary>Login con email institucional y contraseña.</summary>
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginDto dto)
+        [AllowAnonymous]
+        [ProducesResponseType(typeof(TokenResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult<TokenResponseDto>> Login(
+            [FromBody] LoginDto dto,
+            CancellationToken ct)
         {
-            var tokens = await _authService.LoginAsync(dto);
-            return Ok(tokens);
+            try
+            {
+                var tokens = await _authService.LoginAsync(dto);
+                return Ok(tokens);
+            }
+            catch (Exception ex)
+            {
+                return Problem(
+                    title: "Credenciales inválidas",
+                    detail: ex.Message,
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
         }
 
+        /// <summary>Refresca el access token usando el refresh token.</summary>
         [HttpPost("refresh")]
-        public async Task<IActionResult> Refresh([FromBody] string refreshToken)
+        [AllowAnonymous]
+        [ProducesResponseType(typeof(TokenResponseDto), StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        public async Task<ActionResult<TokenResponseDto>> Refresh(
+            [FromBody] RefreshTokenRequestDto body,
+            CancellationToken ct)
         {
-            var tokens = await _authService.RefreshTokenAsync(refreshToken);
-            return Ok(tokens);
+            try
+            {
+                var tokens = await _authService.RefreshTokenAsync(body.RefreshToken);
+                return Ok(tokens);
+            }
+            catch (NotImplementedException)
+            {
+                // Si aún no implementaste refresh:
+                return Problem(
+                    title: "Refresh token no implementado",
+                    detail: "Implementa persistencia/validación de refresh tokens en AuthService.RefreshTokenAsync.",
+                    statusCode: StatusCodes.Status501NotImplemented);
+            }
+            catch (Exception ex)
+            {
+                return Problem(
+                    title: "Refresh inválido",
+                    detail: ex.Message,
+                    statusCode: StatusCodes.Status400BadRequest);
+            }
         }
+    }
+
+    /// <summary>Body para /auth/refresh.</summary>
+    public sealed class RefreshTokenRequestDto
+    {
+        public string RefreshToken { get; set; } = string.Empty;
     }
 }

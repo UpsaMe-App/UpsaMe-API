@@ -4,26 +4,20 @@
     {
         public static void Seed(UpsaMeDbContext db)
         {
-            db.Database.EnsureCreated();
+            Console.WriteLine("🚀 Iniciando carga de datos iniciales UPSA...");
 
-            if (!db.Faculties.Any())
+            try
             {
-                var faculties = FacultySeed.GetFaculties();
-                db.Faculties.AddRange(faculties);
-                db.SaveChanges();
+                FacultySeed.Upsert(db);
+                CareerSeed.Upsert(db);
+                SubjectSeed.Seed(db); // ya debe ser idempotente
 
-                var careers = CareerSeed.GetCareers(faculties);
-                db.Careers.AddRange(careers);
-                db.SaveChanges();
-
-                // Corregido: SubjectSeed ahora usa el contexto directamente
-                SubjectSeed.Seed(db);
-
-                Console.WriteLine("✅ Datos iniciales UPSA cargados correctamente.");
+                Console.WriteLine("✅ Datos iniciales UPSA cargados o actualizados correctamente.");
             }
-            else
+            catch (Exception ex)
             {
-                Console.WriteLine("ℹ️ Los datos iniciales ya existen.");
+                Console.WriteLine($"❌ Error durante el seed: {ex.Message}");
+                throw;
             }
         }
     }

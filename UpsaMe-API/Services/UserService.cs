@@ -16,9 +16,12 @@ namespace UpsaMe_API.Services
             _blobStorageHelper = blobStorageHelper;
         }
 
-        public async Task<UserDto?> GetProfileAsync(Guid userId)
+        public async Task<UserDto?> GetProfileAsync(Guid userId, CancellationToken ct = default)
         {
-            var user = await _context.Users.FindAsync(userId);
+            var user = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Id == userId, ct);
+
             if (user == null) return null;
 
             return new UserDto
@@ -32,25 +35,32 @@ namespace UpsaMe_API.Services
             };
         }
 
-        public async Task UpdateProfileAsync(Guid userId, UpdateProfileDto dto)
+        public async Task UpdateProfileAsync(Guid userId, UpdateProfileDto dto, CancellationToken ct = default)
         {
-            var user = await _context.Users.FindAsync(userId);
-            if (user == null) throw new Exception("Usuario no encontrado.");
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+            if (user == null)
+                throw new InvalidOperationException("Usuario no encontrado.");
 
-            user.FirstName = dto.FirstName ?? user.FirstName;
-            user.LastName = dto.LastName ?? user.LastName;
-            user.Phone = dto.Phone ?? user.Phone;
-            user.Semester = dto.Semester ?? user.Semester;
+            // Actualizaciones básicas
+            if (!string.IsNullOrWhiteSpace(dto.FirstName)) user.FirstName = dto.FirstName.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.LastName))  user.LastName  = dto.LastName.Trim();
+            if (!string.IsNullOrWhiteSpace(dto.Phone))     user.Phone     = dto.Phone.Trim();
+            if (dto.Semester.HasValue)                     user.Semester  = dto.Semester.Value;
 
-            if (dto.ProfilePhoto != null)
+            // Foto de perfil (opcional)
+            if (dto.ProfilePhoto != null && dto.ProfilePhoto.Length > 0)
             {
+                var contentType = string.IsNullOrWhiteSpace(dto.ProfilePhoto.ContentType)
+                    ? "image/jpeg"
+                    : dto.ProfilePhoto.ContentType;
+
                 using var stream = dto.ProfilePhoto.OpenReadStream();
-                user.ProfilePhotoUrl = await _blobStorageHelper.UploadProfilePhotoAsync(
-                    user.Id, stream, dto.ProfilePhoto.ContentType);
+                user.ProfilePhotoUrl = await _blobStorageHelper
+                    .UploadProfilePhotoAsync(user.Id, stream, contentType);
             }
 
-            _context.Users.Update(user);
-            await _context.SaveChangesAsync();
+            // No hace falta _context.Users.Update(user) si la entidad está siendo trackeada
+            await _context.SaveChangesAsync(ct);
         }
     }
 }

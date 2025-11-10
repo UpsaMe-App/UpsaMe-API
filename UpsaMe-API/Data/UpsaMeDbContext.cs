@@ -7,28 +7,74 @@ namespace UpsaMe_API.Data
     {
         public UpsaMeDbContext(DbContextOptions<UpsaMeDbContext> options) : base(options) { }
 
+        // Core
         public DbSet<User> Users => Set<User>();
         public DbSet<Faculty> Faculties => Set<Faculty>();
         public DbSet<Career> Careers => Set<Career>();
         public DbSet<Subject> Subjects => Set<Subject>();
+
+        // Social
         public DbSet<Post> Posts => Set<Post>();
         public DbSet<PostReply> PostReplies => Set<PostReply>();
+        public DbSet<Notification> Notifications => Set<Notification>();
+
+        // Calendly
+        public DbSet<CalendlyEvent> CalendlyEvents => Set<CalendlyEvent>();
+        public DbSet<CalendlyEventType> CalendlyEventTypes => Set<CalendlyEventType>();
+        public DbSet<Session> Sessions => Set<Session>();
+        public DbSet<WebhookLog> WebhookLogs => Set<WebhookLog>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
 
-            modelBuilder.Entity<User>().HasIndex(u => u.Email).IsUnique();
+            // ========== Índices únicos básicos ==========
+            modelBuilder.Entity<User>()
+                .HasIndex(u => u.Email)
+                .IsUnique();
 
+            modelBuilder.Entity<Career>()
+                .HasIndex(c => c.Slug)
+                .IsUnique();
+            
+            // 👇 AQUÍ AGREGÁS ESTE NUEVO
+            modelBuilder.Entity<Faculty>()
+                .HasIndex(f => f.Slug)
+                .IsUnique();
+            
+            // Sugerido: si vas a buscar Subjects por slug, al menos indexarlo
+            modelBuilder.Entity<Subject>()
+                .HasIndex(s => s.Slug);
+
+            // Únicos por diseño (URIs de Calendly)
+            modelBuilder.Entity<CalendlyEvent>()
+                .HasIndex(e => e.EventUri)
+                .IsUnique();
+
+            modelBuilder.Entity<CalendlyEventType>()
+                .HasIndex(et => et.EventTypeUri)
+                .IsUnique();
+
+            // Feed rápido: índice compuesto por Role/Status/CreatedAtUtc
+            modelBuilder.Entity<Post>()
+                .HasIndex(p => new { p.Role, p.Status, p.CreatedAtUtc });
+
+            // Notificaciones: listar no leídas por usuario
+            modelBuilder.Entity<Notification>()
+                .HasIndex(n => new { n.UserId, n.IsRead });
+
+            // ========== Relaciones ==========
             modelBuilder.Entity<Career>()
                 .HasOne(c => c.Faculty)
                 .WithMany(f => f.Careers)
-                .HasForeignKey(c => c.FacultyId);
+                .HasForeignKey(c => c.FacultyId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<Subject>()
                 .HasOne(s => s.Career)
                 .WithMany(c => c.Subjects)
-                .HasForeignKey(s => s.CareerId);
+                .HasForeignKey(s => s.CareerId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<Post>()
                 .HasOne(p => p.User)
@@ -45,7 +91,8 @@ namespace UpsaMe_API.Data
             modelBuilder.Entity<PostReply>()
                 .HasOne(r => r.Post)
                 .WithMany(p => p.Replies)
-                .HasForeignKey(r => r.PostId);
+                .HasForeignKey(r => r.PostId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<PostReply>()
                 .HasOne(r => r.User)

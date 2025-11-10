@@ -4,19 +4,23 @@ namespace UpsaMe_API.DTOs.Auth
 {
     public class RegisterDto
     {
-        [Required, EmailAddress]
+        [Required(ErrorMessage = "El correo electrónico es obligatorio.")]
+        [EmailAddress(ErrorMessage = "El formato del correo no es válido.")]
         public string Email { get; set; } = string.Empty;
 
-        [Required]
+        [Required(ErrorMessage = "La contraseña es obligatoria.")]
+        [MinLength(6, ErrorMessage = "La contraseña debe tener al menos 6 caracteres.")]
         public string Password { get; set; } = string.Empty;
 
-        [Required]
+        [Required(ErrorMessage = "El nombre es obligatorio.")]
         public string FirstName { get; set; } = string.Empty;
 
-        [Required]
+        [Required(ErrorMessage = "El apellido es obligatorio.")]
         public string LastName { get; set; } = string.Empty;
 
         public string? Career { get; set; }
+
+        [Range(1, 12, ErrorMessage = "El semestre debe estar entre 1 y 12.")]
         public int? Semester { get; set; }
     }
 }

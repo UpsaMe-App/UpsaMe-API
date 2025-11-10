@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using UpsaMe_API.DTOs.User;
 using UpsaMe_API.Services;
 
@@ -17,18 +18,29 @@ namespace UpsaMe_API.Controllers
             _userService = userService;
         }
 
+        /// <summary>Obtiene el perfil del usuario autenticado.</summary>
         [HttpGet]
         public async Task<IActionResult> GetProfile()
         {
-            var userId = Guid.Parse(User.FindFirst("sub")?.Value ?? User.FindFirst("nameidentifier")!.Value);
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
+            if (userIdClaim == null)
+                return Unauthorized("Token inválido: no se encontró el ID de usuario.");
+
+            var userId = Guid.Parse(userIdClaim.Value);
             var user = await _userService.GetProfileAsync(userId);
             return Ok(user);
         }
 
+        /// <summary>Actualiza el perfil del usuario autenticado (nombre, teléfono, semestre, foto).</summary>
         [HttpPut]
+        [RequestSizeLimit(10_000_000)] // Límite 10MB por si suben fotos
         public async Task<IActionResult> UpdateProfile([FromForm] UpdateProfileDto dto)
         {
-            var userId = Guid.Parse(User.FindFirst("sub")?.Value ?? User.FindFirst("nameidentifier")!.Value);
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
+            if (userIdClaim == null)
+                return Unauthorized("Token inválido: no se encontró el ID de usuario.");
+
+            var userId = Guid.Parse(userIdClaim.Value);
             await _userService.UpdateProfileAsync(userId, dto);
             return NoContent();
         }

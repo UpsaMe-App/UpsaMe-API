@@ -96,12 +96,13 @@ builder.Services.AddSwaggerGen(c =>
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
-        Description = "Usa: Bearer {tu_jwt}",
+        Description = "Pega aquí SOLO el JWT (sin 'Bearer ').",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.Http,
         Scheme = "bearer",
         BearerFormat = "JWT"
     });
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -146,7 +147,6 @@ using (var scope = app.Services.CreateScope())
         var db = sp.GetRequiredService<UpsaMeDbContext>();
         db.Database.Migrate(); // aplica migraciones pendientes
 
-        // Tu inicializador es estático:
         DbInitializer.Seed(db);
 
         Console.WriteLine("✅ Datos iniciales cargados correctamente.");

@@ -34,6 +34,7 @@ namespace UpsaMe_API.Controllers
         /// <summary>Actualiza el perfil del usuario autenticado (nombre, teléfono, semestre, foto).</summary>
         [HttpPut]
         [RequestSizeLimit(10_000_000)] // Límite 10MB por si suben fotos
+        [HttpPut]
         public async Task<IActionResult> UpdateProfile([FromForm] UpdateProfileDto dto)
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier) ?? User.FindFirst("sub");
@@ -41,8 +42,18 @@ namespace UpsaMe_API.Controllers
                 return Unauthorized("Token inválido: no se encontró el ID de usuario.");
 
             var userId = Guid.Parse(userIdClaim.Value);
+
+            // ✅ Actualiza el perfil
             await _userService.UpdateProfileAsync(userId, dto);
-            return NoContent();
+
+            // ✅ Obtiene el perfil actualizado
+            var updatedProfile = await _userService.GetProfileAsync(userId);
+            if (updatedProfile == null)
+                return NotFound("No se pudo recuperar el perfil actualizado.");
+
+            // ✅ Devuelve el perfil actualizado
+            return Ok(updatedProfile);
         }
+
     }
 }

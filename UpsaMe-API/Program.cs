@@ -12,44 +12,64 @@ using UpsaMe_API.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 // =============================
-// APPSETTINGS (bind a clases fuertemente tipadas)
+// APPSETTINGS (tipados)
 // =============================
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 builder.Services.Configure<AzureSettings>(builder.Configuration.GetSection("AzureSettings"));
 
 // =============================
-// CORS (simple para dev; ajusta en prod)
+// CORS
 // =============================
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
-        policy.AllowAnyOrigin()
-              .AllowAnyHeader()
-              .AllowAnyMethod());
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyHeader()
+            .AllowAnyMethod());
 });
 
 // =============================
-// DB (EF Core SQL Server)
+// DB
 // =============================
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("No se encontró 'ConnectionStrings:DefaultConnection'.");
+
 builder.Services.AddDbContext<UpsaMeDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(
+        connectionString,
+        sqlOptions =>
+        {
+            sqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorNumbersToAdd: null);
+        }));
 
 // =============================
-// Servicios (DI)
+// Servicios
 // =============================
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<DirectoryService>();
 builder.Services.AddScoped<PostService>();
 
-// Blob helper (singleton con connection string)
+// Blob helper
 var blobConn = builder.Configuration.GetSection("AzureSettings")["BlobConnectionString"];
-builder.Services.AddSingleton(new BlobStorageHelper(blobConn!));
+if (string.IsNullOrWhiteSpace(blobConn))
+    throw new InvalidOperationException("AzureSettings:BlobConnectionString no configurado.");
+
+builder.Services.AddSingleton(new BlobStorageHelper(blobConn));
 
 // =============================
-// JWT Auth
+// JWT
 // =============================
-var jwt = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>()!;
+var jwt = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>()
+          ?? throw new InvalidOperationException("JwtSettings no configurado.");
+
+if (string.IsNullOrWhiteSpace(jwt.Key))
+    throw new InvalidOperationException("JwtSettings:Key no puede estar vacío.");
+
 var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key));
 
 builder.Services
@@ -60,7 +80,7 @@ builder.Services
     })
     .AddJwtBearer(options =>
     {
-        options.RequireHttpsMetadata = false; // en prod: true detrás de HTTPS
+        options.RequireHttpsMetadata = false; // dev
         options.SaveToken = true;
         options.TokenValidationParameters = new TokenValidationParameters
         {
@@ -89,10 +109,9 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "UpsaMe API",
         Version = "v1",
-        Description = "API para la plataforma UpsaMe (Ayudantes, Estudiantes, Comentarios)"
+        Description = "API para la plataforma UpsaMe"
     });
 
-    // Auth en Swagger (Bearer)
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -120,24 +139,36 @@ builder.Services.AddSwaggerGen(c =>
 var app = builder.Build();
 
 // =============================
-// Pipeline HTTP
+// Pipeline
 // =============================
+
+// 👇 Para ver errores claros en dev
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseDeveloperExceptionPage();
 }
 
+// CORS
 app.UseCors("AllowAll");
-app.UseHttpsRedirection();
+
+// 👇 TEMPORALMENTE COMENTAMOS HTTPS PARA QUITAR DRAMA
+// app.UseHttpsRedirection();
 
 app.UseAuthentication();
 app.UseAuthorization();
 
+// 👇 Swagger accesible directo en raíz: http://localhost:xxxx/
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "UpsaMe API v1");
+    c.RoutePrefix = string.Empty; // Swagger en "/"
+});
+
 app.MapControllers();
 
 // =============================
-// Seed inicial
+// Seed (igual que antes, pero solo loguea)
 // =============================
 using (var scope = app.Services.CreateScope())
 {
@@ -145,10 +176,8 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var db = sp.GetRequiredService<UpsaMeDbContext>();
-        db.Database.Migrate(); // aplica migraciones pendientes
-
+        db.Database.Migrate();
         DbInitializer.Seed(db);
-
         Console.WriteLine("✅ Datos iniciales cargados correctamente.");
     }
     catch (Exception ex)

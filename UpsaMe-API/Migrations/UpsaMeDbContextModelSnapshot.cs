@@ -215,8 +215,16 @@ namespace UpsaMe_API.Migrations
                     b.Property<Guid?>("SubjectId")
                         .HasColumnType("uniqueidentifier");
 
+                    b.Property<string>("TeacherName")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
                     b.Property<string>("Title")
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("Topics")
+                        .HasMaxLength(500)
+                        .HasColumnType("nvarchar(500)");
 
                     b.Property<DateTime?>("UpdatedAtUtc")
                         .HasColumnType("datetime2");
@@ -341,9 +349,8 @@ namespace UpsaMe_API.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uniqueidentifier");
 
-                    b.Property<string>("Career")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
+                    b.Property<Guid?>("CareerId")
+                        .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Email")
                         .IsRequired()
@@ -372,6 +379,12 @@ namespace UpsaMe_API.Migrations
                     b.Property<string>("ProfilePhotoUrl")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<string>("RefreshToken")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime?>("RefreshTokenExpiresAtUtc")
+                        .HasColumnType("datetime2");
+
                     b.Property<int?>("Semester")
                         .HasColumnType("int");
 
@@ -380,6 +393,8 @@ namespace UpsaMe_API.Migrations
                         .HasColumnType("nvarchar(50)");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("CareerId");
 
                     b.HasIndex("Email")
                         .IsUnique();
@@ -480,9 +495,21 @@ namespace UpsaMe_API.Migrations
                     b.Navigation("Career");
                 });
 
+            modelBuilder.Entity("UpsaMe_API.Models.User", b =>
+                {
+                    b.HasOne("UpsaMe_API.Models.Career", "Career")
+                        .WithMany("Users")
+                        .HasForeignKey("CareerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Career");
+                });
+
             modelBuilder.Entity("UpsaMe_API.Models.Career", b =>
                 {
                     b.Navigation("Subjects");
+
+                    b.Navigation("Users");
                 });
 
             modelBuilder.Entity("UpsaMe_API.Models.Faculty", b =>

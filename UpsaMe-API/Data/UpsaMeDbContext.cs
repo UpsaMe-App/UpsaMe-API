@@ -81,6 +81,12 @@ namespace UpsaMe_API.Data
                 .WithMany()
                 .HasForeignKey(p => p.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+            
+            modelBuilder.Entity<User>()
+                .HasOne(u => u.Career)
+                .WithMany(c => c.Users)
+                .HasForeignKey(u => u.CareerId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             modelBuilder.Entity<Post>()
                 .HasOne(p => p.Subject)

@@ -26,10 +26,13 @@ namespace UpsaMe_API.Services
         public AuthService(UpsaMeDbContext context, IConfiguration config)
         {
             _context = context;
-            _jwt = config.GetSection("JwtSettings").Get<JwtSettings>() 
+            _jwt = config.GetSection("JwtSettings").Get<JwtSettings>()
                    ?? throw new InvalidOperationException("JwtSettings no configurado.");
         }
 
+        // =======================
+        // REGISTER
+        // =======================
         public async Task<TokenResponseDto> RegisterAsync(RegisterDto dto)
         {
             var email = (dto.Email ?? string.Empty).Trim().ToLowerInvariant();
@@ -48,24 +51,26 @@ namespace UpsaMe_API.Services
                 Email = email,
                 PasswordHash = PasswordHasher.HashPassword(dto.Password),
                 FirstName = dto.FirstName?.Trim() ?? string.Empty,
-                LastName = dto.LastName?.Trim() ?? string.Empty,
-                Career = dto.Career,
-                Semester = dto.Semester
+                LastName  = dto.LastName?.Trim()  ?? string.Empty,
+                CareerId  = dto.CareerId,   // 👈 AQUÍ el GUID de la carrera
+                Semester  = dto.Semester
             };
 
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
 
-            return GenerateTokens(user);
+            return await GenerateTokensAsync(user);
         }
 
+        // =======================
+        // LOGIN
+        // =======================
         public async Task<TokenResponseDto> LoginAsync(LoginDto dto)
         {
             var email = (dto.Email ?? string.Empty).Trim().ToLowerInvariant();
 
             var user = await _context.Users
-                .Where(u => u.Email == email)
-                .FirstOrDefaultAsync();
+                .FirstOrDefaultAsync(u => u.Email == email);
 
             if (user == null)
                 throw new InvalidOperationException("Credenciales incorrectas.");
@@ -74,19 +79,40 @@ namespace UpsaMe_API.Services
                 !PasswordHasher.VerifyPassword(dto.Password, user.PasswordHash))
                 throw new InvalidOperationException("Credenciales incorrectas.");
 
-            return GenerateTokens(user);
+            return await GenerateTokensAsync(user);
         }
 
-        public Task<TokenResponseDto> RefreshTokenAsync(string refreshToken)
+        // =======================
+        // REFRESH TOKEN
+        // =======================
+        public async Task<TokenResponseDto> RefreshTokenAsync(string refreshToken)
         {
-            // TODO: persistir y validar refresh tokens (tabla + rotación)
-            throw new NotImplementedException("Refresh token no implementado todavía.");
+            if (string.IsNullOrWhiteSpace(refreshToken))
+                throw new InvalidOperationException("Refresh token requerido.");
+
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.RefreshToken == refreshToken);
+
+            if (user == null)
+                throw new InvalidOperationException("Refresh token inválido.");
+
+            if (!user.RefreshTokenExpiresAtUtc.HasValue ||
+                user.RefreshTokenExpiresAtUtc.Value < DateTime.UtcNow)
+                throw new InvalidOperationException("Refresh token expirado.");
+
+            return await GenerateTokensAsync(user);
         }
 
-        private TokenResponseDto GenerateTokens(User user)
+        // =======================
+        // GENERAR TOKENS
+        // =======================
+        private async Task<TokenResponseDto> GenerateTokensAsync(User user)
         {
             var keyBytes = Encoding.UTF8.GetBytes(_jwt.Key);
-            var creds = new SigningCredentials(new SymmetricSecurityKey(keyBytes), SecurityAlgorithms.HmacSha256);
+            var creds = new SigningCredentials(
+                new SymmetricSecurityKey(keyBytes),
+                SecurityAlgorithms.HmacSha256
+            );
 
             var claims = new List<Claim>
             {
@@ -95,7 +121,7 @@ namespace UpsaMe_API.Services
                 new("fullName", $"{user.FirstName} {user.LastName}")
             };
 
-            var token = new JwtSecurityToken(
+            var accessToken = new JwtSecurityToken(
                 issuer: _jwt.Issuer,
                 audience: _jwt.Audience,
                 claims: claims,
@@ -103,20 +129,30 @@ namespace UpsaMe_API.Services
                 signingCredentials: creds
             );
 
+            var accessTokenString = new JwtSecurityTokenHandler().WriteToken(accessToken);
+
+            var newRefreshToken = Guid.NewGuid().ToString("N");
+            user.RefreshToken = newRefreshToken;
+            user.RefreshTokenExpiresAtUtc = DateTime.UtcNow.AddDays(_jwt.RefreshTokenExpiryDays);
+
+            await _context.SaveChangesAsync();
+
             return new TokenResponseDto
             {
-                AccessToken = new JwtSecurityTokenHandler().WriteToken(token),
-                RefreshToken = Guid.NewGuid().ToString(), // placeholder hasta implementar
-                ExpiresAtUtc = token.ValidTo
+                AccessToken = accessTokenString,
+                RefreshToken = newRefreshToken,
+                ExpiresAtUtc = accessToken.ValidTo
             };
         }
 
+        // =======================
+        // VALIDACIÓN DE PASSWORD
+        // =======================
         private static void ValidatePassword(string password)
         {
             if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
                 throw new InvalidOperationException("La contraseña debe tener al menos 8 caracteres.");
 
-            // opcionalmente fuerza complejidad:
             var hasUpper = password.Any(char.IsUpper);
             var hasLower = password.Any(char.IsLower);
             var hasDigit = password.Any(char.IsDigit);

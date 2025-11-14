@@ -152,7 +152,10 @@ if (app.Environment.IsDevelopment())
 app.UseCors("AllowAll");
 
 // 👇 TEMPORALMENTE COMENTAMOS HTTPS PARA QUITAR DRAMA
-// app.UseHttpsRedirection();
+
+app.UseHttpsRedirection();
+
+app.UseStaticFiles(); // 👈 HABILITA wwwroot
 
 app.UseAuthentication();
 app.UseAuthorization();

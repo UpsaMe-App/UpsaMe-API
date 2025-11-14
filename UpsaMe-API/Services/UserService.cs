@@ -23,7 +23,7 @@ namespace UpsaMe_API.Services
         {
             var user = await _context.Users
                 .AsNoTracking()
-                .Include(u => u.Career) // 👈 usamos la navegación
+                .Include(u => u.Career)
                 .FirstOrDefaultAsync(u => u.Id == userId, ct);
 
             if (user == null) return null;
@@ -33,10 +33,8 @@ namespace UpsaMe_API.Services
                 Id = user.Id,
                 Email = user.Email,
                 FullName = $"{user.FirstName} {user.LastName}",
-
                 CareerId = user.CareerId,
                 Career = user.Career?.Name,
-
                 Semester = user.Semester,
                 ProfilePhotoUrl = user.ProfilePhotoUrl
             };
@@ -51,7 +49,7 @@ namespace UpsaMe_API.Services
             if (user == null)
                 throw new InvalidOperationException("Usuario no encontrado.");
 
-            // Actualizaciones básicas
+            // ---------- Datos básicos ----------
             if (!string.IsNullOrWhiteSpace(dto.FirstName))
                 user.FirstName = dto.FirstName.Trim();
 
@@ -64,11 +62,24 @@ namespace UpsaMe_API.Services
             if (dto.Semester.HasValue)
                 user.Semester = dto.Semester.Value;
 
-            // 👇 Actualizar carrera si vino en el DTO
+            // ---------- Carrera (FK) ----------
+            // Solo actualiza si vino y existe en la BD
             if (dto.CareerId.HasValue)
-                user.CareerId = dto.CareerId.Value;
+            {
+                var exists = await _context.Careers
+                    .AsNoTracking()
+                    .AnyAsync(c => c.Id == dto.CareerId.Value, ct);
 
-            // Foto de perfil (opcional)
+                if (!exists)
+                    throw new InvalidOperationException("La carrera seleccionada no existe.");
+
+                user.CareerId = dto.CareerId.Value;
+            }
+
+            // ---------- Foto / Avatar ----------
+            // Prioridad:
+            // 1) Si viene archivo -> subimos a Blob
+            // 2) Si NO viene archivo pero sí AvatarId -> usamos avatar fijo
             if (dto.ProfilePhoto != null && dto.ProfilePhoto.Length > 0)
             {
                 var contentType = string.IsNullOrWhiteSpace(dto.ProfilePhoto.ContentType)
@@ -80,9 +91,16 @@ namespace UpsaMe_API.Services
                 user.ProfilePhotoUrl = await _blobStorageHelper
                     .UploadProfilePhotoAsync(user.Id, stream, contentType);
             }
+            else if (!string.IsNullOrWhiteSpace(dto.AvatarId))
+            {
+                var avatarUrl = AvatarCatalog.ResolveUrl(dto.AvatarId);
+                if (avatarUrl == null)
+                    throw new InvalidOperationException("Avatar no válido.");
+
+                user.ProfilePhotoUrl = avatarUrl;
+            }
 
             await _context.SaveChangesAsync(ct);
         }
     }
 }
-

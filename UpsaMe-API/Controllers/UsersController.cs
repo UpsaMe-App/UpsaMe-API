@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using UpsaMe_API.DTOs.User;
+using UpsaMe_API.Helpers;
 using UpsaMe_API.Services;
 
 namespace UpsaMe_API.Controllers
@@ -51,6 +52,13 @@ namespace UpsaMe_API.Controllers
                 return NotFound("Usuario no encontrado.");
 
             return Ok(user);
+        }
+        //aqui agrego los avatars
+        [HttpGet("avatars")]
+        [AllowAnonymous]
+        public IActionResult GetAvatarOptions()
+        {
+            return Ok(AvatarCatalog.GetAll());
         }
 
         /// <summary>

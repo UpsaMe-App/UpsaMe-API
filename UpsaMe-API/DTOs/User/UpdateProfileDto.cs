@@ -24,5 +24,8 @@ namespace UpsaMe_API.DTOs.User
         /// Imagen de perfil del usuario (archivo opcional).
         /// </summary>
         public IFormFile? ProfilePhoto { get; set; }
+        
+        public string? AvatarId { get; set; }
+
     }
 }

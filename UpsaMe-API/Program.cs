@@ -12,13 +12,13 @@ using UpsaMe_API.Services;
 var builder = WebApplication.CreateBuilder(args);
 
 // =============================
-// APPSETTINGS (bind a clases fuertemente tipadas)
+// APPSETTINGS
 // =============================
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 builder.Services.Configure<AzureSettings>(builder.Configuration.GetSection("AzureSettings"));
 
 // =============================
-// CORS (simple para dev; ajusta en prod)
+// CORS (simple)
 // =============================
 builder.Services.AddCors(options =>
 {
@@ -29,7 +29,7 @@ builder.Services.AddCors(options =>
 });
 
 // =============================
-// DB (EF Core SQL Server)
+// DB
 // =============================
 builder.Services.AddDbContext<UpsaMeDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
@@ -41,8 +41,9 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<DirectoryService>();
 builder.Services.AddScoped<PostService>();
+builder.Services.AddScoped<TokenService>(); // 🔥 NECESARIO
 
-// Blob helper (singleton con connection string)
+// Blob singleton
 var blobConn = builder.Configuration.GetSection("AzureSettings")["BlobConnectionString"];
 builder.Services.AddSingleton(new BlobStorageHelper(blobConn!));
 
@@ -60,7 +61,7 @@ builder.Services
     })
     .AddJwtBearer(options =>
     {
-        options.RequireHttpsMetadata = false; // en prod: true detrás de HTTPS
+        options.RequireHttpsMetadata = false;
         options.SaveToken = true;
         options.TokenValidationParameters = new TokenValidationParameters
         {
@@ -92,7 +93,6 @@ builder.Services.AddSwaggerGen(c =>
         Description = "API para la plataforma UpsaMe (Ayudantes, Estudiantes, Comentarios)"
     });
 
-    // Auth en Swagger (Bearer)
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
@@ -102,6 +102,7 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "bearer",
         BearerFormat = "JWT"
     });
+
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -128,6 +129,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("AllowAll");
+
 app.UseHttpsRedirection();
 
 app.UseAuthentication();
@@ -144,9 +146,8 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var db = sp.GetRequiredService<UpsaMeDbContext>();
-        db.Database.Migrate(); // aplica migraciones pendientes
+        db.Database.Migrate();
 
-        // Tu inicializador es estático:
         DbInitializer.Seed(db);
 
         Console.WriteLine("✅ Datos iniciales cargados correctamente.");

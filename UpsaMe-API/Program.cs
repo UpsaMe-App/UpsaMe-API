@@ -16,10 +16,37 @@ using Microsoft.Extensions.FileProviders;
 var builder = WebApplication.CreateBuilder(args);
 
 // =============================
+// HTTP clients / DI
+// =============================
+// You already had OneSignalHelper registered; keep that.
+builder.Services.AddHttpClient<OneSignalHelper>();
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<OneSignalHelper>();
+
+// Register CalendlyService as a typed HttpClient.
+// IMPORTANT: CalendlyService should have a constructor like:
+// public CalendlyService(HttpClient httpClient) { _client = httpClient; }
+builder.Services.AddHttpClient<CalendlyService>(client =>
+{
+    // BaseUrl read from configuration (appsettings or env/user-secrets)
+    var baseUrl = builder.Configuration["Calendly:BaseUrl"] ?? "https://api.calendly.com/";
+    client.BaseAddress = new Uri(baseUrl);
+    // Don't put ApiKey here in code; we add default header from config:
+    var apiKey = builder.Configuration["Calendly:ApiKey"];
+    if (!string.IsNullOrWhiteSpace(apiKey))
+    {
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+    }
+});
+
+// =============================
 // APPSETTINGS (tipados)
 // =============================
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 builder.Services.Configure<AzureSettings>(builder.Configuration.GetSection("AzureSettings"));
+// Optional: if you create a OneSignalSettings class, uncomment the next line and create the class in Config/
+// builder.Services.Configure<OneSignalSettings>(builder.Configuration.GetSection("OneSignal"));
 
 // =============================
 // CORS
@@ -158,7 +185,8 @@ builder.Services.AddSwaggerGen(c =>
 });
 
 // =============================
-// Opcional: Forwarded headers (si estás detrás de proxy / nginx / Azure)\n// Esto ayuda a que Request.Scheme y Request.Host sean correctos\n// =============================
+// Forwarded headers (si estás detrás de proxy / nginx / Azure)
+// =============================
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;

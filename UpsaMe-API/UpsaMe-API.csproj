@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
@@ -9,6 +9,7 @@
     <!-- Docs XML para Swagger (sin romper build por faltas de comentarios) -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);1591</NoWarn>
+    <UserSecretsId>4d9017f9-57cf-439f-85a6-f12bffa31640</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

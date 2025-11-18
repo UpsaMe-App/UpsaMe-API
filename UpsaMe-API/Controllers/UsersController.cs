@@ -53,9 +53,15 @@ namespace UpsaMe_API.Controllers
 
             return Ok(user);
         }
-        //aqui agrego los avatars
-        [HttpGet("avatars")]
+
+        // AVATARS: ruta renombrada para evitar conflicto con otro controlador que expone GET users/avatars
+        /// <summary>
+        /// Opciones públicas de avatar (lista de ids/nombres/urls del catálogo).
+        /// Ruta: GET users/avatars/options
+        /// </summary>
+        [HttpGet("avatars/options")]
         [AllowAnonymous]
+        [ProducesResponseType(StatusCodes.Status200OK)]
         public IActionResult GetAvatarOptions()
         {
             return Ok(AvatarCatalog.GetAll());

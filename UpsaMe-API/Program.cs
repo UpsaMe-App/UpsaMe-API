@@ -8,6 +8,10 @@ using UpsaMe_API.Data;
 using UpsaMe_API.Data.Seed;
 using UpsaMe_API.Helpers;
 using UpsaMe_API.Services;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.ResponseCompression;
+using System.IO.Compression;
+using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +32,23 @@ builder.Services.AddCors(options =>
             .AllowAnyHeader()
             .AllowAnyMethod());
 });
+
+// =============================
+// Compression & Caching (rendimiento)
+// =============================
+// Response compression
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<GzipCompressionProvider>();
+});
+builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+
+// Response caching (control simple de cache HTTP)
+builder.Services.AddResponseCaching();
 
 // =============================
 // DB
@@ -136,6 +157,14 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// =============================
+// Opcional: Forwarded headers (si estás detrás de proxy / nginx / Azure)\n// Esto ayuda a que Request.Scheme y Request.Host sean correctos\n// =============================
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // En produccion especifica KnownProxies o KnownNetworks si es necesario.
+});
+
 var app = builder.Build();
 
 // =============================
@@ -147,16 +176,44 @@ if (app.Environment.IsDevelopment())
 {
     app.UseDeveloperExceptionPage();
 }
+else
+{
+    // HSTS para producción
+    app.UseHsts();
+}
 
-// CORS
+// CORS (global)
 app.UseCors("AllowAll");
 
-// 👇 TEMPORALMENTE COMENTAMOS HTTPS PARA QUITAR DRAMA
+// Forwarded headers (antes de otras middlewares que dependen del scheme/host)
+app.UseForwardedHeaders();
 
+// Compression + Caching
+app.UseResponseCompression();
+app.UseResponseCaching();
+
+// 👇 TEMPORALMENTE COMENTAMOS HTTPS PARA QUITAR DRAMA
 app.UseHttpsRedirection();
 
-app.UseStaticFiles(); // 👈 HABILITA wwwroot
+// Static files - habilitar wwwroot y añadir headers específicos para avatars
+// Se añade OnPrepareResponse para agregar CORS header a recursos estáticos (útil para image cross-origin)
+app.UseStaticFiles(); // sirve wwwroot por defecto
 
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(
+        Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "avatars")),
+    RequestPath = "/avatars",
+    OnPrepareResponse = ctx =>
+    {
+        ctx.Context.Response.Headers["Access-Control-Allow-Origin"] = "*";
+        ctx.Context.Response.Headers["Access-Control-Allow-Methods"] = "GET, OPTIONS";
+        ctx.Context.Response.Headers["Access-Control-Allow-Headers"] = "Content-Type";
+        ctx.Context.Response.Headers["Cache-Control"] = "public,max-age=3600";
+    }
+});
+
+// Authentication & Authorization
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -168,6 +225,10 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = string.Empty; // Swagger en "/"
 });
 
+// Health endpoint simple
+app.MapGet("/health", () => Results.Ok(new { status = "ok", now = DateTime.UtcNow })).AllowAnonymous();
+
+// Controllers
 app.MapControllers();
 
 // =============================

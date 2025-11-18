@@ -105,6 +105,8 @@ namespace UpsaMe_API.Data
                 .WithMany()
                 .HasForeignKey(r => r.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+            
+            
         }
     }
 }

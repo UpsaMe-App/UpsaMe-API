@@ -16,6 +16,7 @@ using Microsoft.Extensions.FileProviders;
 var builder = WebApplication.CreateBuilder(args);
 
 // =============================
+ Flavia
 // HTTP clients / DI
 // =============================
 // You already had OneSignalHelper registered; keep that.
@@ -42,6 +43,9 @@ builder.Services.AddHttpClient<CalendlyService>(client =>
 
 // =============================
 // APPSETTINGS (tipados)
+
+// APPSETTINGS
+ main
 // =============================
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 builder.Services.Configure<AzureSettings>(builder.Configuration.GetSection("AzureSettings"));
@@ -49,7 +53,11 @@ builder.Services.Configure<AzureSettings>(builder.Configuration.GetSection("Azur
 // builder.Services.Configure<OneSignalSettings>(builder.Configuration.GetSection("OneSignal"));
 
 // =============================
+Flavia
 // CORS
+
+// CORS (simple)
+main
 // =============================
 builder.Services.AddCors(options =>
 {
@@ -61,7 +69,11 @@ builder.Services.AddCors(options =>
 });
 
 // =============================
+ Flavia
 // Compression & Caching (rendimiento)
+
+// DB
+ main
 // =============================
 // Response compression
 builder.Services.AddResponseCompression(options =>
@@ -101,8 +113,13 @@ builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
 builder.Services.AddScoped<DirectoryService>();
 builder.Services.AddScoped<PostService>();
+builder.Services.AddScoped<TokenService>(); // 🔥 NECESARIO
 
+ Flavia
 // Blob helper
+
+// Blob singleton
+ main
 var blobConn = builder.Configuration.GetSection("AzureSettings")["BlobConnectionString"];
 if (string.IsNullOrWhiteSpace(blobConn))
     throw new InvalidOperationException("AzureSettings:BlobConnectionString no configurado.");
@@ -128,7 +145,11 @@ builder.Services
     })
     .AddJwtBearer(options =>
     {
+ Flavia
         options.RequireHttpsMetadata = false; // dev
+
+        options.RequireHttpsMetadata = false;
+ main
         options.SaveToken = true;
         options.TokenValidationParameters = new TokenValidationParameters
         {
@@ -213,6 +234,7 @@ else
 // CORS (global)
 app.UseCors("AllowAll");
 
+ Flavia
 // Forwarded headers (antes de otras middlewares que dependen del scheme/host)
 app.UseForwardedHeaders();
 
@@ -221,6 +243,7 @@ app.UseResponseCompression();
 app.UseResponseCaching();
 
 // 👇 TEMPORALMENTE COMENTAMOS HTTPS PARA QUITAR DRAMA
+ main
 app.UseHttpsRedirection();
 
 // Static files - habilitar wwwroot y añadir headers específicos para avatars
@@ -269,6 +292,9 @@ using (var scope = app.Services.CreateScope())
     {
         var db = sp.GetRequiredService<UpsaMeDbContext>();
         db.Database.Migrate();
+ Flavia
+
+main
         DbInitializer.Seed(db);
         Console.WriteLine("✅ Datos iniciales cargados correctamente.");
     }

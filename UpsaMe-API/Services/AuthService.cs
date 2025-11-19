@@ -1,11 +1,4 @@
-﻿using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
-using System.Text.RegularExpressions;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
-using Microsoft.IdentityModel.Tokens;
-using UpsaMe_API.Config;
+﻿using Microsoft.EntityFrameworkCore;
 using UpsaMe_API.Data;
 using UpsaMe_API.DTOs.Auth;
 using UpsaMe_API.Helpers;
@@ -15,16 +8,12 @@ namespace UpsaMe_API.Services
 {
     public class AuthService
     {
-        private readonly UpsaMeDbContext _context;
-        private readonly JwtSettings _jwt;
+        private readonly UpsaMeDbContext _db;
+        private readonly TokenService _tokenService;
 
-        // a(2005–2025) + 6 dígitos + dominio
-        private static readonly Regex UpsaEmailRegex =
-            new(@"^a(2005|2006|2007|2008|2009|201[0-9]|202[0-5])\d{6}@estudiantes\.upsa\.edu\.bo$",
-                RegexOptions.IgnoreCase | RegexOptions.Compiled);
-
-        public AuthService(UpsaMeDbContext context, IConfiguration config)
+        public AuthService(UpsaMeDbContext db, TokenService tokenService)
         {
+ Flavia
             _context = context;
             _jwt = config.GetSection("JwtSettings").Get<JwtSettings>()
                    ?? throw new InvalidOperationException("JwtSettings no configurado.");
@@ -34,54 +23,78 @@ namespace UpsaMe_API.Services
         // REGISTER
         // =======================
         public async Task<TokenResponseDto> RegisterAsync(RegisterDto dto)
-        {
-            var email = (dto.Email ?? string.Empty).Trim().ToLowerInvariant();
-            if (!UpsaEmailRegex.IsMatch(email))
-                throw new InvalidOperationException("Email institucional no válido.");
+            _db = db;
+            _tokenService = tokenService;
+        }
 
+        // ============================================================
+        //  REGISTRO DE USUARIO
+        // ============================================================
+        public async Task<TokenResponseDto> RegisterAsync(RegisterDto dto, CancellationToken ct = default)
+ main
+        {
             ValidatePassword(dto.Password);
 
-            var exists = await _context.Users.AnyAsync(u => u.Email == email);
-            if (exists)
-                throw new InvalidOperationException("El correo ya está registrado.");
+            var email = dto.Email.Trim().ToLower();
+
+            // Verificar si el correo ya existe
+            if (await _db.Users.AnyAsync(u => u.Email == email, ct))
+                throw new InvalidOperationException("Ya existe un usuario con este correo institucional.");
 
             var user = new User
             {
-                Id = Guid.NewGuid(),
                 Email = email,
+ Flavia
                 PasswordHash = PasswordHasher.HashPassword(dto.Password),
                 FirstName = dto.FirstName?.Trim() ?? string.Empty,
                 LastName  = dto.LastName?.Trim()  ?? string.Empty,
                 CareerId  = dto.CareerId,   // 👈 AQUÍ el GUID de la carrera
                 Semester  = dto.Semester
+
+                FirstName = dto.FirstName.Trim(),
+                LastName = dto.LastName.Trim(),
+                Career = dto.Career?.Trim(),
+                Semester = dto.Semester,
+                PasswordHash = HashHelper.HashPassword(dto.Password) // importante
+ main
             };
 
-            _context.Users.Add(user);
-            await _context.SaveChangesAsync();
+            _db.Users.Add(user);
+            await _db.SaveChangesAsync(ct);
 
             return await GenerateTokensAsync(user);
         }
 
+ Flavia
         // =======================
         // LOGIN
         // =======================
         public async Task<TokenResponseDto> LoginAsync(LoginDto dto)
-        {
-            var email = (dto.Email ?? string.Empty).Trim().ToLowerInvariant();
 
+        // ============================================================
+        //  LOGIN
+        // ============================================================
+        public async Task<TokenResponseDto> LoginAsync(LoginDto dto, CancellationToken ct = default)
+ main
+        {
+            var email = dto.Email.Trim().ToLower();
+
+ Flavia
             var user = await _context.Users
                 .FirstOrDefaultAsync(u => u.Email == email);
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email, ct);
+ main
 
             if (user == null)
-                throw new InvalidOperationException("Credenciales incorrectas.");
+                throw new InvalidOperationException("Credenciales inválidas.");
 
-            if (string.IsNullOrEmpty(user.PasswordHash) ||
-                !PasswordHasher.VerifyPassword(dto.Password, user.PasswordHash))
-                throw new InvalidOperationException("Credenciales incorrectas.");
+            if (!HashHelper.VerifyPassword(dto.Password, user.PasswordHash))
+                throw new InvalidOperationException("Credenciales inválidas.");
 
             return await GenerateTokensAsync(user);
         }
 
+ Flavia
         // =======================
         // REFRESH TOKEN
         // =======================
@@ -148,6 +161,19 @@ namespace UpsaMe_API.Services
         // =======================
         // VALIDACIÓN DE PASSWORD
         // =======================
+
+        // ============================================================
+        //  REFRESH TOKEN (POR AHORA NO IMPLEMENTADO, PERO EVITA ERRORES)
+        // ============================================================
+        public Task<TokenResponseDto> RefreshTokenAsync(string refreshToken)
+        {
+            throw new NotImplementedException("Refresh token no implementado aún.");
+        }
+
+        // ============================================================
+        //  VALIDACIÓN DE CONTRASEÑA
+        // ============================================================
+ main
         private static void ValidatePassword(string password)
         {
             if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
@@ -156,8 +182,29 @@ namespace UpsaMe_API.Services
             var hasUpper = password.Any(char.IsUpper);
             var hasLower = password.Any(char.IsLower);
             var hasDigit = password.Any(char.IsDigit);
+
             if (!(hasUpper && hasLower && hasDigit))
                 throw new InvalidOperationException("La contraseña debe incluir mayúsculas, minúsculas y dígitos.");
         }
+
+        // ============================================================
+        //  GENERAR TOKENS JWT
+        // ============================================================
+        private TokenResponseDto GenerateTokens(User user)
+        {
+            var (access, refresh, expiresAt) = _tokenService.GenerateTokens(user);
+
+            return new TokenResponseDto
+            {
+                AccessToken = access,
+                RefreshToken = refresh,
+                ExpiresAtUtc = expiresAt
+            };
+        }
     }
+ Flavia
 }
+
+}
+
+ main

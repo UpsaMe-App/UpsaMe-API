@@ -19,9 +19,11 @@ namespace UpsaMe_API.Models
 
         [Required]
         public Guid FacultyId { get; set; }
-
         public Faculty? Faculty { get; set; }
 
         public ICollection<Subject>? Subjects { get; set; }
+
+        // 🔹 Nuevo: usuarios en esta carrera
+        public ICollection<User>? Users { get; set; }
     }
 }

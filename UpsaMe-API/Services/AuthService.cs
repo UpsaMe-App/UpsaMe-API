@@ -13,6 +13,16 @@ namespace UpsaMe_API.Services
 
         public AuthService(UpsaMeDbContext db, TokenService tokenService)
         {
+ Flavia
+            _context = context;
+            _jwt = config.GetSection("JwtSettings").Get<JwtSettings>()
+                   ?? throw new InvalidOperationException("JwtSettings no configurado.");
+        }
+
+        // =======================
+        // REGISTER
+        // =======================
+        public async Task<TokenResponseDto> RegisterAsync(RegisterDto dto)
             _db = db;
             _tokenService = tokenService;
         }
@@ -21,6 +31,7 @@ namespace UpsaMe_API.Services
         //  REGISTRO DE USUARIO
         // ============================================================
         public async Task<TokenResponseDto> RegisterAsync(RegisterDto dto, CancellationToken ct = default)
+ main
         {
             ValidatePassword(dto.Password);
 
@@ -33,27 +44,46 @@ namespace UpsaMe_API.Services
             var user = new User
             {
                 Email = email,
+ Flavia
+                PasswordHash = PasswordHasher.HashPassword(dto.Password),
+                FirstName = dto.FirstName?.Trim() ?? string.Empty,
+                LastName  = dto.LastName?.Trim()  ?? string.Empty,
+                CareerId  = dto.CareerId,   // 👈 AQUÍ el GUID de la carrera
+                Semester  = dto.Semester
+
                 FirstName = dto.FirstName.Trim(),
                 LastName = dto.LastName.Trim(),
                 Career = dto.Career?.Trim(),
                 Semester = dto.Semester,
                 PasswordHash = HashHelper.HashPassword(dto.Password) // importante
+ main
             };
 
             _db.Users.Add(user);
             await _db.SaveChangesAsync(ct);
 
-            return GenerateTokens(user);
+            return await GenerateTokensAsync(user);
         }
+
+ Flavia
+        // =======================
+        // LOGIN
+        // =======================
+        public async Task<TokenResponseDto> LoginAsync(LoginDto dto)
 
         // ============================================================
         //  LOGIN
         // ============================================================
         public async Task<TokenResponseDto> LoginAsync(LoginDto dto, CancellationToken ct = default)
+ main
         {
             var email = dto.Email.Trim().ToLower();
 
+ Flavia
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email == email);
             var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email, ct);
+ main
 
             if (user == null)
                 throw new InvalidOperationException("Credenciales inválidas.");
@@ -61,8 +91,76 @@ namespace UpsaMe_API.Services
             if (!HashHelper.VerifyPassword(dto.Password, user.PasswordHash))
                 throw new InvalidOperationException("Credenciales inválidas.");
 
-            return GenerateTokens(user);
+            return await GenerateTokensAsync(user);
         }
+
+ Flavia
+        // =======================
+        // REFRESH TOKEN
+        // =======================
+        public async Task<TokenResponseDto> RefreshTokenAsync(string refreshToken)
+        {
+            if (string.IsNullOrWhiteSpace(refreshToken))
+                throw new InvalidOperationException("Refresh token requerido.");
+
+            var user = await _context.Users
+                .FirstOrDefaultAsync(u => u.RefreshToken == refreshToken);
+
+            if (user == null)
+                throw new InvalidOperationException("Refresh token inválido.");
+
+            if (!user.RefreshTokenExpiresAtUtc.HasValue ||
+                user.RefreshTokenExpiresAtUtc.Value < DateTime.UtcNow)
+                throw new InvalidOperationException("Refresh token expirado.");
+
+            return await GenerateTokensAsync(user);
+        }
+
+        // =======================
+        // GENERAR TOKENS
+        // =======================
+        private async Task<TokenResponseDto> GenerateTokensAsync(User user)
+        {
+            var keyBytes = Encoding.UTF8.GetBytes(_jwt.Key);
+            var creds = new SigningCredentials(
+                new SymmetricSecurityKey(keyBytes),
+                SecurityAlgorithms.HmacSha256
+            );
+
+            var claims = new List<Claim>
+            {
+                new(JwtRegisteredClaimNames.Sub, user.Id.ToString()),
+                new(JwtRegisteredClaimNames.Email, user.Email),
+                new("fullName", $"{user.FirstName} {user.LastName}")
+            };
+
+            var accessToken = new JwtSecurityToken(
+                issuer: _jwt.Issuer,
+                audience: _jwt.Audience,
+                claims: claims,
+                expires: DateTime.UtcNow.AddMinutes(_jwt.ExpiryMinutes),
+                signingCredentials: creds
+            );
+
+            var accessTokenString = new JwtSecurityTokenHandler().WriteToken(accessToken);
+
+            var newRefreshToken = Guid.NewGuid().ToString("N");
+            user.RefreshToken = newRefreshToken;
+            user.RefreshTokenExpiresAtUtc = DateTime.UtcNow.AddDays(_jwt.RefreshTokenExpiryDays);
+
+            await _context.SaveChangesAsync();
+
+            return new TokenResponseDto
+            {
+                AccessToken = accessTokenString,
+                RefreshToken = newRefreshToken,
+                ExpiresAtUtc = accessToken.ValidTo
+            };
+        }
+
+        // =======================
+        // VALIDACIÓN DE PASSWORD
+        // =======================
 
         // ============================================================
         //  REFRESH TOKEN (POR AHORA NO IMPLEMENTADO, PERO EVITA ERRORES)
@@ -75,6 +173,7 @@ namespace UpsaMe_API.Services
         // ============================================================
         //  VALIDACIÓN DE CONTRASEÑA
         // ============================================================
+ main
         private static void ValidatePassword(string password)
         {
             if (string.IsNullOrWhiteSpace(password) || password.Length < 8)
@@ -103,5 +202,9 @@ namespace UpsaMe_API.Services
             };
         }
     }
+ Flavia
 }
 
+}
+
+ main

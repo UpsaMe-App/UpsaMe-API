@@ -76,14 +76,6 @@ namespace UpsaMe_API.Controllers
                 var tokens = await _authService.RefreshTokenAsync(body.RefreshToken);
                 return Ok(tokens);
             }
-            catch (NotImplementedException)
-            {
-                // Si aún no implementaste refresh:
-                return Problem(
-                    title: "Refresh token no implementado",
-                    detail: "Implementa persistencia/validación de refresh tokens en AuthService.RefreshTokenAsync.",
-                    statusCode: StatusCodes.Status501NotImplemented);
-            }
             catch (Exception ex)
             {
                 return Problem(

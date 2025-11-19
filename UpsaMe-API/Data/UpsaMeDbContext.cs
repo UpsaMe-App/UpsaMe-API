@@ -7,6 +7,8 @@ namespace UpsaMe_API.Data
     {
         public UpsaMeDbContext(DbContextOptions<UpsaMeDbContext> options) : base(options) { }
 
+        public DbSet<NotificationDevice> NotificationDevices => Set<NotificationDevice>();
+        public DbSet<Notification> Notifications => Set<Notification>();
         // Core
         public DbSet<User> Users => Set<User>();
         public DbSet<Faculty> Faculties => Set<Faculty>();
@@ -16,7 +18,6 @@ namespace UpsaMe_API.Data
         // Social
         public DbSet<Post> Posts => Set<Post>();
         public DbSet<PostReply> PostReplies => Set<PostReply>();
-        public DbSet<Notification> Notifications => Set<Notification>();
 
         // Calendly
         public DbSet<CalendlyEvent> CalendlyEvents => Set<CalendlyEvent>();
@@ -81,6 +82,12 @@ namespace UpsaMe_API.Data
                 .WithMany()
                 .HasForeignKey(p => p.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+            
+            modelBuilder.Entity<User>()
+                .HasOne(u => u.Career)
+                .WithMany(c => c.Users)
+                .HasForeignKey(u => u.CareerId)
+                .OnDelete(DeleteBehavior.SetNull);
 
             modelBuilder.Entity<Post>()
                 .HasOne(p => p.Subject)
@@ -99,6 +106,8 @@ namespace UpsaMe_API.Data
                 .WithMany()
                 .HasForeignKey(r => r.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+            
+            
         }
     }
 }

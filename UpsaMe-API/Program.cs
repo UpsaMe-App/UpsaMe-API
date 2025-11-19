@@ -8,34 +8,106 @@ using UpsaMe_API.Data;
 using UpsaMe_API.Data.Seed;
 using UpsaMe_API.Helpers;
 using UpsaMe_API.Services;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.ResponseCompression;
+using System.IO.Compression;
+using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // =============================
+ Flavia
+// HTTP clients / DI
+// =============================
+// You already had OneSignalHelper registered; keep that.
+builder.Services.AddHttpClient<OneSignalHelper>();
+builder.Services.AddScoped<NotificationService>();
+builder.Services.AddScoped<OneSignalHelper>();
+
+// Register CalendlyService as a typed HttpClient.
+// IMPORTANT: CalendlyService should have a constructor like:
+// public CalendlyService(HttpClient httpClient) { _client = httpClient; }
+builder.Services.AddHttpClient<CalendlyService>(client =>
+{
+    // BaseUrl read from configuration (appsettings or env/user-secrets)
+    var baseUrl = builder.Configuration["Calendly:BaseUrl"] ?? "https://api.calendly.com/";
+    client.BaseAddress = new Uri(baseUrl);
+    // Don't put ApiKey here in code; we add default header from config:
+    var apiKey = builder.Configuration["Calendly:ApiKey"];
+    if (!string.IsNullOrWhiteSpace(apiKey))
+    {
+        client.DefaultRequestHeaders.Authorization =
+            new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+    }
+});
+
+// =============================
+// APPSETTINGS (tipados)
+
 // APPSETTINGS
+ main
 // =============================
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 builder.Services.Configure<AzureSettings>(builder.Configuration.GetSection("AzureSettings"));
+// Optional: if you create a OneSignalSettings class, uncomment the next line and create the class in Config/
+// builder.Services.Configure<OneSignalSettings>(builder.Configuration.GetSection("OneSignal"));
 
 // =============================
+Flavia
+// CORS
+
 // CORS (simple)
+main
 // =============================
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
-        policy.AllowAnyOrigin()
-              .AllowAnyHeader()
-              .AllowAnyMethod());
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyHeader()
+            .AllowAnyMethod());
 });
+
+// =============================
+ Flavia
+// Compression & Caching (rendimiento)
+
+// DB
+ main
+// =============================
+// Response compression
+builder.Services.AddResponseCompression(options =>
+{
+    options.EnableForHttps = true;
+    options.Providers.Add<GzipCompressionProvider>();
+});
+builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+{
+    options.Level = CompressionLevel.Fastest;
+});
+
+// Response caching (control simple de cache HTTP)
+builder.Services.AddResponseCaching();
 
 // =============================
 // DB
 // =============================
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("No se encontró 'ConnectionStrings:DefaultConnection'.");
+
 builder.Services.AddDbContext<UpsaMeDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(
+        connectionString,
+        sqlOptions =>
+        {
+            sqlOptions.EnableRetryOnFailure(
+                maxRetryCount: 5,
+                maxRetryDelay: TimeSpan.FromSeconds(10),
+                errorNumbersToAdd: null);
+        }));
 
 // =============================
-// Servicios (DI)
+// Servicios
 // =============================
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UserService>();
@@ -43,14 +115,26 @@ builder.Services.AddScoped<DirectoryService>();
 builder.Services.AddScoped<PostService>();
 builder.Services.AddScoped<TokenService>(); // 🔥 NECESARIO
 
+ Flavia
+// Blob helper
+
 // Blob singleton
+ main
 var blobConn = builder.Configuration.GetSection("AzureSettings")["BlobConnectionString"];
-builder.Services.AddSingleton(new BlobStorageHelper(blobConn!));
+if (string.IsNullOrWhiteSpace(blobConn))
+    throw new InvalidOperationException("AzureSettings:BlobConnectionString no configurado.");
+
+builder.Services.AddSingleton(new BlobStorageHelper(blobConn));
 
 // =============================
-// JWT Auth
+// JWT
 // =============================
-var jwt = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>()!;
+var jwt = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>()
+          ?? throw new InvalidOperationException("JwtSettings no configurado.");
+
+if (string.IsNullOrWhiteSpace(jwt.Key))
+    throw new InvalidOperationException("JwtSettings:Key no puede estar vacío.");
+
 var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwt.Key));
 
 builder.Services
@@ -61,7 +145,11 @@ builder.Services
     })
     .AddJwtBearer(options =>
     {
+ Flavia
+        options.RequireHttpsMetadata = false; // dev
+
         options.RequireHttpsMetadata = false;
+ main
         options.SaveToken = true;
         options.TokenValidationParameters = new TokenValidationParameters
         {
@@ -90,13 +178,13 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "UpsaMe API",
         Version = "v1",
-        Description = "API para la plataforma UpsaMe (Ayudantes, Estudiantes, Comentarios)"
+        Description = "API para la plataforma UpsaMe"
     });
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Name = "Authorization",
-        Description = "Usa: Bearer {tu_jwt}",
+        Description = "Pega aquí SOLO el JWT (sin 'Bearer ').",
         In = ParameterLocation.Header,
         Type = SecuritySchemeType.Http,
         Scheme = "bearer",
@@ -117,28 +205,85 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
+// =============================
+// Forwarded headers (si estás detrás de proxy / nginx / Azure)
+// =============================
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // En produccion especifica KnownProxies o KnownNetworks si es necesario.
+});
+
 var app = builder.Build();
 
 // =============================
-// Pipeline HTTP
+// Pipeline
 // =============================
+
+// 👇 Para ver errores claros en dev
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseDeveloperExceptionPage();
+}
+else
+{
+    // HSTS para producción
+    app.UseHsts();
 }
 
+// CORS (global)
 app.UseCors("AllowAll");
 
+ Flavia
+// Forwarded headers (antes de otras middlewares que dependen del scheme/host)
+app.UseForwardedHeaders();
+
+// Compression + Caching
+app.UseResponseCompression();
+app.UseResponseCaching();
+
+// 👇 TEMPORALMENTE COMENTAMOS HTTPS PARA QUITAR DRAMA
+ main
 app.UseHttpsRedirection();
 
+// Static files - habilitar wwwroot y añadir headers específicos para avatars
+// Se añade OnPrepareResponse para agregar CORS header a recursos estáticos (útil para image cross-origin)
+app.UseStaticFiles(); // sirve wwwroot por defecto
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(
+        Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "avatars")),
+    RequestPath = "/avatars",
+    OnPrepareResponse = ctx =>
+    {
+        ctx.Context.Response.Headers["Access-Control-Allow-Origin"] = "*";
+        ctx.Context.Response.Headers["Access-Control-Allow-Methods"] = "GET, OPTIONS";
+        ctx.Context.Response.Headers["Access-Control-Allow-Headers"] = "Content-Type";
+        ctx.Context.Response.Headers["Cache-Control"] = "public,max-age=3600";
+    }
+});
+
+// Authentication & Authorization
 app.UseAuthentication();
 app.UseAuthorization();
 
+// 👇 Swagger accesible directo en raíz: http://localhost:xxxx/
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "UpsaMe API v1");
+    c.RoutePrefix = string.Empty; // Swagger en "/"
+});
+
+// Health endpoint simple
+app.MapGet("/health", () => Results.Ok(new { status = "ok", now = DateTime.UtcNow })).AllowAnonymous();
+
+// Controllers
 app.MapControllers();
 
 // =============================
-// Seed inicial
+// Seed (igual que antes, pero solo loguea)
 // =============================
 using (var scope = app.Services.CreateScope())
 {
@@ -147,9 +292,10 @@ using (var scope = app.Services.CreateScope())
     {
         var db = sp.GetRequiredService<UpsaMeDbContext>();
         db.Database.Migrate();
+ Flavia
 
+main
         DbInitializer.Seed(db);
-
         Console.WriteLine("✅ Datos iniciales cargados correctamente.");
     }
     catch (Exception ex)
